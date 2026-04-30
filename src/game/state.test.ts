@@ -11,6 +11,9 @@ import {
   consumeMaterials,
   advancePhase,
   isGameOver,
+  performApplyCycle,
+  settleRound,
+  isSettled,
 } from './state.js'
 
 // Test 1: 初始状态
@@ -97,3 +100,107 @@ assert(!isGameOver(s10), '正常状态不应结束')
 console.log('✓ 游戏结束判定正确')
 
 console.log('\n所有测试通过!')
+
+// ============================================================
+// Test 10–12: performApplyCycle 状态耦合
+// ============================================================
+
+// Test 10: 理想配比 performApplyCycle — 资源 + 风险同时变化
+const sa = createInitialState()
+setMixRatio(sa, 1, 4, 1)
+sa.stirProgress = 0.9
+performApplyCycle(sa)
+assert(sa.currentWallQuality > 60, `applyCycle: 理想配比应高质, got ${sa.currentWallQuality}`)
+assert(sa.water < 100 || sa.sand < 100 || sa.lime < 100, 'applyCycle: 材料被消耗')
+assert(sa.wall_quality > 0, 'applyCycle: wall_quality 有变化')
+console.log('✓ performApplyCycle 理想配比耦合正确')
+
+// Test 11: 低质量返工消耗额外材料
+const sb = createInitialState()
+setMixRatio(sb, 10, 0, 0)
+sb.stirProgress = 0.1
+performApplyCycle(sb)
+assert(sb.currentWallQuality < 30, `差配比低质量, got ${sb.currentWallQuality}`)
+// consumeMaterials 扣 mixWater*3=30, 低质量额外扣 2, 共 32
+assert(sb.water <= 100 - 10 * 3 - 2, `低质量应额外消耗, water=${sb.water}`)
+console.log('✓ 低质量返工额外消耗正确')
+
+// Test 12: 材料不足增加风险
+const sc = createInitialState()
+sc.water = 10; sc.sand = 10; sc.lime = 10
+setMixRatio(sc, 1, 1, 1)
+sc.stirProgress = 0.5
+performApplyCycle(sc)
+// consumeMaterials 扣完后 water=7,sand=7,lime=7, avg=7 < 20 → +5 risk
+assert(sc.inspection_risk > 0, `材料不足应加风险, risk=${sc.inspection_risk}`)
+console.log('✓ 材料不足风险耦合正确')
+
+// ============================================================
+// Test 13–19: settleRound 结算
+// ============================================================
+
+// Test 13: 稳固墙体
+const sd = createInitialState()
+sd.wall_quality = 80; sd.inspection_risk = 10
+const r13 = settleRound(sd)
+assert.equal(r13.outcome, 'solid_wall')
+assert.equal(r13.summary, '墙体稳固，配比合格')
+assert(isSettled(r13), 'solid_wall 应为终态')
+console.log('✓ 结算 — 稳固墙体')
+
+// Test 14: 暂时遮掩
+const se = createInitialState()
+se.wall_quality = 55; se.inspection_risk = 25
+const r14 = settleRound(se)
+assert.equal(r14.outcome, 'covered_up')
+assert(isSettled(r14), 'covered_up 应为终态')
+console.log('✓ 结算 — 暂时遮掩')
+
+// Test 15: 需要返工
+const sf = createInitialState()
+sf.wall_quality = 30; sf.inspection_risk = 60
+const r15 = settleRound(sf)
+assert.equal(r15.outcome, 'rework_needed')
+assert(isSettled(r15), 'rework_needed 应为终态')
+console.log('✓ 结算 — 需要返工')
+
+// Test 16: 关键崩溃（风险满）
+const sg = createInitialState()
+sg.inspection_risk = 100
+const r16 = settleRound(sg)
+assert.equal(r16.outcome, 'critical_fail')
+assert.equal(r16.summary, '抽检不合格，被要求返工淘汰')
+assert(isSettled(r16), 'critical_fail 应为终态')
+console.log('✓ 结算 — 关键崩溃(风险)')
+
+// Test 17: 关键崩溃（材料耗尽）
+const sh = createInitialState()
+sh.water = 0; sh.sand = 0; sh.lime = 0
+const r17 = settleRound(sh)
+assert.equal(r17.outcome, 'critical_fail')
+assert.equal(r17.summary, '材料耗尽，被迫停工')
+console.log('✓ 结算 — 关键崩溃(材料)')
+
+// Test 18: 继续循环 (quality>=40 但 risk>=50 → 不命中任何终态)
+const si = createInitialState()
+si.wall_quality = 50; si.inspection_risk = 55
+const r18 = settleRound(si)
+assert.equal(r18.outcome, 'continuing')
+assert(!isSettled(r18), 'continuing 不应为终态')
+console.log('✓ 结算 — 继续循环')
+
+// Test 19: 完整一次主循环 + 结算
+const sj = createInitialState()
+setMixRatio(sj, 1, 4, 1)
+sj.stirProgress = 0.9
+advancePhase(sj) // check_materials → mix_ratio
+advancePhase(sj) // mix_ratio → stir
+advancePhase(sj) // stir → apply
+performApplyCycle(sj)
+assert(sj.currentWallQuality > 60, `完整循环: 高质量, got ${sj.currentWallQuality}`)
+const r19 = settleRound(sj)
+assert(
+  r19.outcome === 'solid_wall',
+  `完整循环理想配比应稳固, got ${r19.outcome}`,
+)
+console.log('✓ 完整一次主循环 + 结算')

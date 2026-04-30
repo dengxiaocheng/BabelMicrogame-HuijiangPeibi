@@ -116,3 +116,136 @@ export function isGameOver(state: GameState): boolean {
   return (state.water <= 0 && state.sand <= 0 && state.lime <= 0)
     || state.inspection_risk >= 100
 }
+
+// ============================================================
+// 结算系统
+// ============================================================
+
+export type SettlementOutcome =
+  | 'solid_wall'      // 稳固墙体：wall_quality >= 70, inspection_risk < 30
+  | 'covered_up'      // 暂时遮掩：wall_quality >= 40, inspection_risk < 50
+  | 'rework_needed'   // 需要返工：wall_quality < 40, inspection_risk >= 50
+  | 'critical_fail'   // 关键崩溃：系统淘汰
+  | 'continuing'      // 继续循环
+
+export interface SettlementResult {
+  outcome: SettlementOutcome
+  wallQuality: number
+  inspectionRisk: number
+  materialAvg: number
+  round: number
+  summary: string
+}
+
+/** 材料平均余量 (0–100) */
+function materialAvg(state: GameState): number {
+  return (Math.max(0, state.water) + Math.max(0, state.sand) + Math.max(0, state.lime)) / 3
+}
+
+/**
+ * 执行涂抹墙段的完整操作（状态耦合入口）
+ *
+ * 同时推动两类后果 (MECHANIC_SPEC State Coupling):
+ *   生存/资源压力: 消耗 water/sand/lime, 更新 wall_quality
+ *   关系/风险压力: 更新 inspection_risk, 材料不足或质量过低额外加压
+ */
+export function performApplyCycle(state: GameState): void {
+  applyToWall(state)
+  consumeMaterials(state)
+
+  // 材料不足 → 风险压力增加
+  const avg = materialAvg(state)
+  if (avg < 20) {
+    state.inspection_risk = Math.min(100, state.inspection_risk + 5)
+  }
+
+  // 质量过低 → 返工消耗额外材料
+  if (state.currentWallQuality < 30) {
+    state.water = Math.max(0, state.water - 2)
+    state.sand = Math.max(0, state.sand - 2)
+    state.lime = Math.max(0, state.lime - 2)
+  }
+}
+
+/**
+ * 一次完整主循环后的结算
+ *
+ * 评估所有 5 个 Required State，确定结算结局:
+ *   Success: solid_wall / covered_up
+ *   Failure: rework_needed / critical_fail
+ *   未定: continuing
+ */
+export function settleRound(state: GameState): SettlementResult {
+  const avg = materialAvg(state)
+
+  // === 关键崩溃 ===
+  if (state.inspection_risk >= 100) {
+    return {
+      outcome: 'critical_fail',
+      wallQuality: state.wall_quality,
+      inspectionRisk: state.inspection_risk,
+      materialAvg: avg,
+      round: state.round,
+      summary: '抽检不合格，被要求返工淘汰',
+    }
+  }
+  if (state.water <= 0 && state.sand <= 0 && state.lime <= 0) {
+    return {
+      outcome: 'critical_fail',
+      wallQuality: state.wall_quality,
+      inspectionRisk: state.inspection_risk,
+      materialAvg: 0,
+      round: state.round,
+      summary: '材料耗尽，被迫停工',
+    }
+  }
+
+  // === 成功结算 ===
+  if (state.wall_quality >= 70 && state.inspection_risk < 30) {
+    return {
+      outcome: 'solid_wall',
+      wallQuality: state.wall_quality,
+      inspectionRisk: state.inspection_risk,
+      materialAvg: avg,
+      round: state.round,
+      summary: '墙体稳固，配比合格',
+    }
+  }
+  if (state.wall_quality >= 40 && state.inspection_risk < 50) {
+    return {
+      outcome: 'covered_up',
+      wallQuality: state.wall_quality,
+      inspectionRisk: state.inspection_risk,
+      materialAvg: avg,
+      round: state.round,
+      summary: '表面尚可，暂时遮掩过关',
+    }
+  }
+
+  // === 失败结算 ===
+  if (state.wall_quality < 40 && state.inspection_risk >= 50) {
+    return {
+      outcome: 'rework_needed',
+      wallQuality: state.wall_quality,
+      inspectionRisk: state.inspection_risk,
+      materialAvg: avg,
+      round: state.round,
+      summary: '质量太差，需要返工',
+    }
+  }
+
+  // === 未定，继续循环 ===
+  return {
+    outcome: 'continuing',
+    wallQuality: state.wall_quality,
+    inspectionRisk: state.inspection_risk,
+    materialAvg: avg,
+    round: state.round,
+    summary: '继续下一轮循环',
+  }
+}
+
+/** 结算结果是否为终态 */
+export function isSettled(result: SettlementResult): boolean {
+  return result.outcome !== 'continuing'
+}
