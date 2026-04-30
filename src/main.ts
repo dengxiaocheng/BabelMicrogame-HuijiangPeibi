@@ -12,8 +12,23 @@ import {
   applyToWall,
   consumeMaterials,
   isGameOver,
+  settleRound,
+  performApplyCycle,
 } from './game/state.js'
 import { bindSliders, bindStirButton, updateUI } from './game/interaction.js'
+import { pickEvent, applyEffects, type EventChoice } from './content/eventPool.js'
+import {
+  initGameUI,
+  updatePressureDisplay,
+  updatePhasePipeline,
+  showEvent,
+  hideEvent,
+  showSurfaceFeedback,
+  showMaterialScene,
+  hideSurfacePanel,
+  showSettlement,
+  updateStirFeedback,
+} from './ui/gameUI.js'
 
 const canvas = document.getElementById('game-canvas') as HTMLCanvasElement
 const ctx = canvas.getContext('2d')!
@@ -22,13 +37,15 @@ const H = canvas.height
 
 let state: GameState
 let animFrame = 0
+let waitingForEvent = false
 
 // ─── 初始化 ────────────────────────────────────
 
 function init(): void {
   state = createInitialState()
+  initGameUI()
   bindSliders(state, () => render())
-  bindStirButton(state, () => render())
+  bindStirButton(state, () => { render(); updateStirFeedback(state.stirProgress) })
   bindActionButtons()
   bindSliderLabels()
   updatePhaseUI()
@@ -40,7 +57,7 @@ function init(): void {
 function loop(): void {
   animFrame++
   render()
-  if (isGameOver(state)) { renderGameOver(); return }
+  if (isGameOver(state)) { handleGameOver(); return }
   requestAnimationFrame(loop)
 }
 
@@ -48,23 +65,68 @@ function loop(): void {
 
 function bindActionButtons(): void {
   document.getElementById('btn-action')?.addEventListener('click', () => {
-    if (isGameOver(state)) return
-    switch (state.phase) {
-      case 'check_materials': advancePhase(state); break
-      case 'mix_ratio': advancePhase(state); break
-      case 'stir': advancePhase(state); break
-      case 'apply':
-        applyToWall(state)
-        consumeMaterials(state)
-        advancePhase(state)
-        break
-      case 'observe': advancePhase(state); break
-      case 'inspect': advancePhase(state); break
-    }
-    updatePhaseUI()
-    updateUI(state)
-    render()
+    if (isGameOver(state) || waitingForEvent) return
+    handlePhaseAction()
   })
+}
+
+function handlePhaseAction(): void {
+  switch (state.phase) {
+    case 'check_materials':
+      showMaterialScene(state)
+      triggerPhaseEvent('check_materials', () => {
+        advancePhase(state)
+        updatePhaseUI()
+      })
+      break
+    case 'mix_ratio':
+      hideSurfacePanel()
+      advancePhase(state)
+      updatePhaseUI()
+      break
+    case 'stir':
+      if (state.stirProgress < 0.2) return
+      triggerPhaseEvent('stir', () => {
+        advancePhase(state)
+        updatePhaseUI()
+      })
+      break
+    case 'apply':
+      performApplyCycle(state)
+      advancePhase(state)
+      updatePhaseUI()
+      break
+    case 'observe':
+      showSurfaceFeedback(state.currentWallQuality)
+      advancePhase(state)
+      updatePhaseUI()
+      break
+    case 'inspect':
+      hideSurfacePanel()
+      triggerPhaseEvent('inspect', () => {
+        advancePhase(state)
+        updatePhaseUI()
+      })
+      break
+  }
+  updateUI(state)
+  render()
+}
+
+function triggerPhaseEvent(stage: string, onDone: () => void): void {
+  const event = pickEvent(stage as any, state)
+  if (event) {
+    waitingForEvent = true
+    showEvent(event, (choice: EventChoice) => {
+      applyEffects(state, choice.stateEffect)
+      waitingForEvent = false
+      updateUI(state)
+      render()
+      setTimeout(onDone, 800)
+    })
+  } else {
+    onDone()
+  }
 }
 
 function bindSliderLabels(): void {
@@ -78,12 +140,12 @@ function bindSliderLabels(): void {
 }
 
 const ACTION_LABELS: Record<string, string> = {
-  check_materials: '开始配比',
-  mix_ratio: '确认配比，开始搅拌',
-  stir: '搅拌完成，涂抹墙段',
-  apply: '涂抹到墙段',
-  observe: '继续',
-  inspect: '下一墙段',
+  check_materials: '查看材料',
+  mix_ratio: '确认配比',
+  stir: '搅拌完成',
+  apply: '涂抹墙段',
+  observe: '观察表面',
+  inspect: '抽检 / 下一墙段',
 }
 
 function updatePhaseUI(): void {
@@ -94,6 +156,15 @@ function updatePhaseUI(): void {
   const stirPanel = document.getElementById('stir-panel')
   if (sliderPanel) sliderPanel.style.display = state.phase === 'mix_ratio' ? 'block' : 'none'
   if (stirPanel) stirPanel.style.display = state.phase === 'stir' ? 'block' : 'none'
+
+  updatePressureDisplay(state)
+  updatePhasePipeline(state.phase)
+}
+
+function handleGameOver(): void {
+  const result = settleRound(state)
+  showSettlement(result)
+  renderGameOver()
 }
 
 // ─── 渲染 ──────────────────────────────────────
@@ -104,6 +175,7 @@ function render(): void {
   drawTrough()
   drawWall()
   updateUI(state)
+  updatePressureDisplay(state)
 }
 
 function drawBackground(): void {
