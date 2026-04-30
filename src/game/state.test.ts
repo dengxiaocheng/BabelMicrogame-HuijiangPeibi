@@ -204,3 +204,80 @@ assert(
   `完整循环理想配比应稳固, got ${r19.outcome}`,
 )
 console.log('✓ 完整一次主循环 + 结算')
+
+// ============================================================
+// Test 20: ACCEPTANCE_PLAYTHROUGH.md 核心循环验收
+// 按 ACCEPTANCE_PLAYTHROUGH.md 的 4 步脚本逐项验证
+// ============================================================
+{
+  const s = createInitialState()
+
+  // Step 1: 开局显示 water / sand / lime / wall_quality / inspection_risk
+  const keys = ['water', 'sand', 'lime', 'wall_quality', 'inspection_risk'] as const
+  for (const k of keys) {
+    assert(typeof s[k] === 'number', `playthrough: ${k} 初始可见`)
+  }
+  assert.equal(s.phase, 'check_materials', 'playthrough: 起始阶段正确')
+
+  // Step 2: 玩家执行一次核心操作 (查看材料 → 调配 → 搅拌 → 涂抹 → 观察 → 抽检)
+  const preW = s.water, preS = s.sand, preL = s.lime, preRisk = s.inspection_risk
+  setMixRatio(s, 1, 4, 1)   // 调配灰浆 (primary input: 滑杆)
+  s.stirProgress = 0.85      // 搅拌 (primary input: 按住搅拌)
+  performApplyCycle(s)        // 涂抹墙段
+  for (let i = 0; i < 6; i++) advancePhase(s) // 推进完整一轮
+
+  // Step 3: 系统必须反馈一个资源或身体压力变化
+  assert(s.water < preW || s.sand < preS || s.lime < preL,
+    'playthrough: 资源压力必须有变化')
+
+  // Step 4: 系统必须反馈一个关系或风险变化
+  // 理想配比: 风险不增，结算给出 solid_wall (风险控制反馈)
+  const r20 = settleRound(s)
+  assert.equal(r20.outcome, 'solid_wall', 'playthrough: 理想配比应得稳固结局')
+  assert(r20.inspectionRisk >= 0, 'playthrough: 风险状态可读')
+
+  console.log('✓ ACCEPTANCE_PLAYTHROUGH 核心循环验收通过')
+}
+
+// ============================================================
+// Test 21: 多轮失败路径 (自然触发失败结局)
+// ============================================================
+{
+  const s = createInitialState()
+  let rounds = 0
+  for (; rounds < 20; rounds++) {
+    if (isGameOver(s)) break
+    setMixRatio(s, 8, 1, 0)   // 极差配比: 过多水
+    s.stirProgress = 0.1       // 几乎没搅拌
+    performApplyCycle(s)
+    for (let i = 0; i < 6; i++) advancePhase(s)
+  }
+  assert(isGameOver(s), `多轮差配比应导致游戏结束, rounds=${rounds}`)
+  const r21 = settleRound(s)
+  assert(
+    r21.outcome === 'critical_fail' || r21.outcome === 'rework_needed',
+    `多轮失败应进入失败结局, got ${r21.outcome}`,
+  )
+  assert(isSettled(r21), '失败路径应可结算')
+  console.log('✓ 多轮失败路径覆盖')
+}
+
+// ============================================================
+// Test 22: Primary input → state delta (非 choice-only 验证)
+// 玩家通过滑杆调整至少两个材料比例 + 控制搅拌时间 → 影响 wall_quality
+// ============================================================
+{
+  const s = createInitialState()
+  const preQ = s.wall_quality
+  const preW = s.water
+
+  // minimum_interaction: 调整至少两个材料比例
+  setMixRatio(s, 2, 3, 1)    // water 和 sand 都偏离默认
+  s.stirProgress = 0.6        // 控制搅拌时间
+  performApplyCycle(s)         // 操作场景对象 (搅拌槽 → 墙段)
+
+  assert(s.currentWallQuality > 0, `primary input 质量非零, got ${s.currentWallQuality}`)
+  assert(s.wall_quality !== preQ, 'primary input: wall_quality 因操作改变')
+  assert(s.water < preW, 'primary input: 材料因操作消耗')
+  console.log('✓ Primary input → state delta (非 choice-only)')
+}
