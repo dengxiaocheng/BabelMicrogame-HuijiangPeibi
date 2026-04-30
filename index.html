@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>灰浆配比</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #2a1a0a; color: #e8dcc8; font-family: sans-serif; display: flex; flex-direction: column; align-items: center; padding: 12px; }
+    #header { display: flex; gap: 20px; align-items: center; margin-bottom: 8px; font-size: 14px; }
+    #header span { padding: 4px 10px; background: #3a2a1a; border-radius: 4px; }
+    #game-canvas { border: 2px solid #5c4033; border-radius: 4px; background: #d4c5a9; }
+    #controls { display: flex; gap: 16px; margin-top: 8px; flex-wrap: wrap; justify-content: center; max-width: 800px; }
+    .panel { background: #3a2a1a; padding: 10px 14px; border-radius: 6px; min-width: 180px; }
+    .panel h3 { font-size: 13px; color: #c4a060; margin-bottom: 6px; }
+    .material-bar { height: 10px; background: #5c4033; border-radius: 3px; margin: 3px 0 6px; }
+    .material-bar .fill { height: 100%; border-radius: 3px; transition: width 0.3s; }
+    #bar-water .fill { background: #4a90c4; }
+    #bar-sand .fill { background: #c4a040; }
+    #bar-lime .fill { background: #e0d8c0; }
+    .slider-row { display: flex; align-items: center; gap: 6px; margin: 4px 0; font-size: 12px; }
+    .slider-row input[type=range] { width: 100px; }
+    #consistency-bar { height: 14px; background: #5c4033; border-radius: 3px; margin-top: 6px; }
+    #consistency-meter { height: 100%; background: #c4a040; border-radius: 3px; width: 0%; transition: width 0.15s, background 0.3s; }
+    #risk-bar { height: 14px; background: #5c4033; border-radius: 3px; margin-top: 6px; }
+    #risk-meter { height: 100%; background: #c45040; border-radius: 3px; width: 0%; transition: width 0.3s; }
+    #btn-stir { padding: 10px 24px; font-size: 15px; background: #5c4033; color: #e8dcc8; border: 2px solid #8b6914; border-radius: 6px; cursor: pointer; user-select: none; }
+    #btn-stir.active { background: #8b6914; border-color: #c4a040; }
+    #btn-stir:active { transform: scale(0.96); }
+    #btn-action { padding: 10px 24px; font-size: 15px; background: #4a7c3f; color: #fff; border: none; border-radius: 6px; cursor: pointer; }
+    #btn-action:hover { background: #5a9c4f; }
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+  <div id="header">
+    <span id="phase-label">查看材料</span>
+    <span id="round-label">第 1 轮</span>
+    <span id="quality-label">墙面质量: 70</span>
+  </div>
+
+  <canvas id="game-canvas" width="800" height="400"></canvas>
+
+  <div id="controls">
+    <!-- 材料余量 -->
+    <div class="panel">
+      <h3>今日材料</h3>
+      <label style="font-size:12px">水</label>
+      <div class="material-bar" id="bar-water"><div class="fill" style="width:100%"></div></div>
+      <label style="font-size:12px">砂</label>
+      <div class="material-bar" id="bar-sand"><div class="fill" style="width:100%"></div></div>
+      <label style="font-size:12px">灰</label>
+      <div class="material-bar" id="bar-lime"><div class="fill" style="width:100%"></div></div>
+      <label style="font-size:11px;color:#888">抽检风险</label>
+      <div id="risk-bar"><div id="risk-meter"></div></div>
+    </div>
+
+    <!-- 配比滑杆 -->
+    <div class="panel" id="slider-panel">
+      <h3>调配比例</h3>
+      <div class="slider-row"><span>水</span><input type="range" id="slider-water" min="0" max="10" value="3"><span id="val-water">3</span></div>
+      <div class="slider-row"><span>砂</span><input type="range" id="slider-sand" min="0" max="10" value="5"><span id="val-sand">5</span></div>
+      <div class="slider-row"><span>灰</span><input type="range" id="slider-lime" min="0" max="10" value="2"><span id="val-lime">2</span></div>
+      <div style="font-size:11px;color:#888;margin-top:4px">理想比例 约 1:4:1</div>
+    </div>
+
+    <!-- 搅拌区 -->
+    <div class="panel" id="stir-panel">
+      <h3>搅拌灰浆</h3>
+      <button id="btn-stir">按住搅拌</button>
+      <div style="font-size:11px;color:#888;margin-top:4px">稠度</div>
+      <div id="consistency-bar"><div id="consistency-meter"></div></div>
+    </div>
+
+    <!-- 操作按钮 -->
+    <div class="panel" style="display:flex;align-items:center">
+      <button id="btn-action">开始配比</button>
+    </div>
+  </div>
+
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
