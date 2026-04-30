@@ -172,3 +172,87 @@ export const RECIPES: MortarRecipe[] = [
 export function recipeById(id: string): MortarRecipe | undefined {
   return RECIPES.find((r) => r.id === id)
 }
+
+// ============================================================
+// 场景对象状态描述
+// 场景对象在不同 Required State 值下的视觉反馈文本
+// 服务 Feedback Channels：让玩家通过观察场景对象推断隐藏状态
+// ============================================================
+
+export interface SceneObjectState {
+  object: string
+  /** [min, max, description] — 按状态值区间描述视觉 */
+  ranges: [number, number, string][]
+}
+
+/** 材料类场景对象（water/sand/lime，值域 0–100） */
+export const MATERIAL_SCENE_STATES: Record<string, SceneObjectState> = {
+  water_bucket: {
+    object: '水桶',
+    ranges: [
+      [80, 100, '桶里水色清亮，水量充足。'],
+      [40, 79, '水位降了一半，桶底隐约可见。'],
+      [10, 39, '只剩薄薄一层水底，再舀两勺就见底了。'],
+      [0, 9, '桶底干涸，刮不出一滴水。'],
+    ],
+  },
+  sand_pile: {
+    object: '砂堆',
+    ranges: [
+      [80, 100, '砂堆饱满，黄中带亮。'],
+      [40, 79, '砂堆矮了半截，边缘开始露出地面。'],
+      [10, 39, '只剩一滩散沙，用铲子收拢才勉强够一锅。'],
+      [0, 9, '地上只剩砂痕，扫也扫不出多少了。'],
+    ],
+  },
+  lime_bag: {
+    object: '灰袋',
+    ranges: [
+      [80, 100, '灰袋鼓鼓囊囊，粉质干燥松散。'],
+      [40, 79, '袋子瘪了一半，底部还剩些好料。'],
+      [10, 39, '袋底倒扣才能倒出来，粉里夹了结块。'],
+      [0, 9, '空袋子，抖两下飘出最后一缕白灰。'],
+    ],
+  },
+}
+
+/** 墙段场景对象（wall_quality，值域 0–100） */
+export const WALL_SCENE_STATE: SceneObjectState = {
+  object: '待涂墙段',
+  ranges: [
+    [80, 100, '墙面灰浆平整密实，色泽均匀。'],
+    [50, 79, '墙面整体覆盖，有几处细纹和色差。'],
+    [25, 49, '灰浆层薄且不均，能看到底层砖色。'],
+    [0, 24, '灰浆大面积脱落，砖缝裸露。'],
+  ],
+}
+
+/** 获取场景对象在指定状态值下的描述 */
+export function sceneObjectDescription(
+  def: SceneObjectState, value: number,
+): string {
+  for (const [min, max, desc] of def.ranges) {
+    if (value >= min && value <= max) return desc
+  }
+  return def.ranges[def.ranges.length - 1][2]
+}
+
+// ============================================================
+// 搅拌稠度反馈（stirProgress 0–1）
+// ============================================================
+
+/** 搅拌槽在不同搅拌充分度下的视觉描述 */
+export const STIR_FEEDBACK: [number, number, string][] = [
+  [0.8, 1.0, '灰浆均匀翻滚，无结块。稠度达标。'],
+  [0.5, 0.79, '大部分已搅开，底部还有少量干粉团。'],
+  [0.2, 0.49, '搅拌不充分，可见明显颗粒和干料。'],
+  [0.0, 0.19, '槽里一团散沙，几乎没有搅匀。'],
+]
+
+/** 获取搅拌稠度描述 */
+export function stirFeedback(stirProgress: number): string {
+  for (const [min, max, desc] of STIR_FEEDBACK) {
+    if (stirProgress >= min && stirProgress <= max) return desc
+  }
+  return STIR_FEEDBACK[STIR_FEEDBACK.length - 1][2]
+}
