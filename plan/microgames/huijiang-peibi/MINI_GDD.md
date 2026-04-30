@@ -13,11 +13,11 @@
 
 ## State
 
-- resource
-- pressure
-- risk
-- relation
-- round
+- water
+- sand
+- lime
+- wall_quality
+- inspection_risk
 
 ## UI
 
