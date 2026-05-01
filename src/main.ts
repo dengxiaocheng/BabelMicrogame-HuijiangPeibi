@@ -13,6 +13,7 @@ import {
   consumeMaterials,
   isGameOver,
   settleRound,
+  isSettled,
   performApplyCycle,
 } from './game/state.js'
 import { bindSliders, bindStirButton, updateUI } from './game/interaction.js'
@@ -38,6 +39,7 @@ const H = canvas.height
 let state: GameState
 let animFrame = 0
 let waitingForEvent = false
+let gameEnded = false
 
 // ─── 初始化 ────────────────────────────────────
 
@@ -55,6 +57,7 @@ function init(): void {
 }
 
 function loop(): void {
+  if (gameEnded) return
   animFrame++
   render()
   if (isGameOver(state)) { handleGameOver(); return }
@@ -105,6 +108,14 @@ function handlePhaseAction(): void {
       hideSurfacePanel()
       triggerPhaseEvent('inspect', () => {
         advancePhase(state)
+        // Settlement check after each complete round
+        const result = settleRound(state)
+        if (isSettled(result)) {
+          gameEnded = true
+          showSettlement(result)
+          renderGameOver()
+          return
+        }
         updatePhaseUI()
       })
       break
@@ -162,6 +173,7 @@ function updatePhaseUI(): void {
 }
 
 function handleGameOver(): void {
+  gameEnded = true
   const result = settleRound(state)
   showSettlement(result)
   renderGameOver()
